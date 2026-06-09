@@ -11,8 +11,6 @@ interface SettingsModalProps {
 type ProviderConfig = {
   id: Provider;
   name: string;
-  tagline: string;
-  badge: string;
   badgeColor: string;
   gradient: string;
   icon: React.ReactNode;
@@ -28,8 +26,6 @@ const PROVIDERS: ProviderConfig[] = [
   {
     id: "groq",
     name: "Groq",
-    tagline: "Blazing fast inference",
-    badge: "FREE",
     badgeColor: "text-orange-400 bg-orange-400/10 border-orange-400/20",
     gradient: "from-orange-500 to-amber-500",
     icon: (
@@ -49,8 +45,6 @@ const PROVIDERS: ProviderConfig[] = [
   {
     id: "openrouter",
     name: "OpenRouter",
-    tagline: "100+ models, free tier",
-    badge: "FREE",
     badgeColor: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
     gradient: "from-emerald-500 to-teal-500",
     icon: (
@@ -72,8 +66,6 @@ const PROVIDERS: ProviderConfig[] = [
   {
     id: "gemini",
     name: "Gemini",
-    tagline: "Google DeepMind models",
-    badge: "PAID",
     badgeColor: "text-violet-400 bg-violet-400/10 border-violet-400/20",
     gradient: "from-violet-500 to-indigo-500",
     icon: (
@@ -255,9 +247,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <span className={`text-[11px] font-semibold tracking-wide transition-colors ${provider === p.id ? "text-white" : "text-gray-500"}`}>
                     {p.name}
                   </span>
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${p.badgeColor}`}>
-                    {p.badge}
-                  </span>
+
                 </button>
               ))}
             </div>
@@ -270,13 +260,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-white">{cfg.name}</p>
-              <p className="text-xs text-gray-400">{cfg.tagline} · <a href={cfg.keyLink} target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white underline underline-offset-2">{cfg.keyLinkShort}</a></p>
+              <p className="text-xs text-gray-400"><a href={cfg.keyLink} target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white underline underline-offset-2">{cfg.keyLinkShort}</a></p>
             </div>
-            <div className="ml-auto shrink-0">
-              <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${cfg.badgeColor}`}>
-                {cfg.badge}
-              </span>
-            </div>
+
           </div>
 
           {/* API Key */}
@@ -312,10 +298,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </button>
             </div>
             <div className="mt-2 flex items-center gap-1.5">
-              <svg className="h-3 w-3 text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-3 w-3 text-lime-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
-              <p className="text-[11px] text-gray-600">Stored locally in your browser only. Never sent to our servers.</p>
+              <p className="text-[11px] text-lime-400">Stored locally in your browser only. Never sent to our servers.</p>
             </div>
           </div>
 
