@@ -224,7 +224,7 @@ export default function PoseCamera() {
       </div>
 
       {/* ═══════════════ TOP LOGO BAR (always visible) ═══════════════ */}
-      <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 pt-6 pb-3">
+      <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 pt-2 pb-3">
         {/* Left: Logo */}
         <div className="flex items-center">
           <div className="h-6" style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))" }}>
