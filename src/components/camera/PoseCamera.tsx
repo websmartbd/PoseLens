@@ -170,11 +170,19 @@ export default function PoseCamera() {
     return () => { observer.disconnect(); cancelAnimationFrame(rafId); };
   }, [pose]);
 
+  // Determine if we need space for the bottom bar
+  const isCameraActive = appState !== "idle";
+  const BOTTOM_BAR_HEIGHT = 120;
+
   return (
     <div className="fixed inset-0 overflow-hidden bg-black text-white">
 
       {/* ═══════════════ CAMERA BACKGROUND ═══════════════ */}
-      <div className="absolute inset-0 z-0">
+      {/* Container ends at the bottom bar when active, or fills screen when idle */}
+      <div 
+        className="absolute inset-x-0 top-0 z-0 bg-[#050505] transition-all duration-300"
+        style={{ bottom: isCameraActive ? `${BOTTOM_BAR_HEIGHT}px` : "0px" }}
+      >
         {appState === "idle" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4"
             style={{ background: "radial-gradient(ellipse at 50% 60%, #1a0a2e 0%, #060010 100%)" }}>
@@ -284,10 +292,9 @@ export default function PoseCamera() {
       )}
 
       {/* ═══════════════ BOTTOM BAR ═══════════════ */}
-      <div className="absolute inset-x-0 bottom-0 z-30">
-
+      <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col justify-end pointer-events-none">
         {appState === "idle" ? (
-          <div className="flex items-center justify-center pb-16 pt-4">
+          <div className="flex items-center justify-center pb-16 pt-4 pointer-events-auto">
             <button id="open-camera-btn" onClick={() => startCamera()}
               className="flex items-center gap-2.5 rounded-full px-8 py-4 text-sm font-bold text-white shadow-2xl transition active:scale-95"
               style={{
@@ -304,8 +311,8 @@ export default function PoseCamera() {
           </div>
         ) : (
           /* Dark solid bottom bar */
-          <div className="flex items-center justify-between px-8 py-5"
-            style={{ background: "rgba(0,0,0,0.95)" }}>
+          <div className="flex items-center justify-between px-8 w-full pointer-events-auto"
+            style={{ height: `${BOTTOM_BAR_HEIGHT}px`, background: "#000000" }}>
 
             {/* Left: Close / Stop camera */}
             <button id="stop-camera-btn" onClick={stopCamera}
