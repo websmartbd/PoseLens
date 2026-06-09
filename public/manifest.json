@@ -1,6 +1,6 @@
 {
   "name": "Pose Lens — AI Pose Director",
-  "short_name": "Pose Lens",
+  "short_name": "PoseLens",
   "description": "Pose Lens provides AI-powered pose suggestions for your photos. Point, capture, and get directed.",
   "start_url": "/",
   "display": "standalone",
@@ -9,12 +9,12 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/images/logo.png",
+      "src": "/images/favicon.png",
       "sizes": "512x512",
       "type": "image/png"
     },
     {
-      "src": "/images/logo.png",
+      "src": "/images/favicon.png",
       "sizes": "192x192",
       "type": "image/png"
     }
