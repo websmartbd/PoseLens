@@ -216,15 +216,12 @@ export default function PoseCamera() {
       </div>
 
       {/* ═══════════════ TOP LOGO BAR (always visible) ═══════════════ */}
-      <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 py-3"
-        style={{ background: "rgba(0,0,0,0.85)" }}>
+      <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 pt-6 pb-3">
         {/* Left: Logo */}
-        <div className="flex items-center gap-1.5">
-          <div className="h-7 w-7 overflow-hidden rounded-full border border-white/10"
-            style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}>
-            <img src="/images/logo.png" alt="PoseLens" className="h-full w-full object-cover" />
+        <div className="flex items-center">
+          <div className="h-6" style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))" }}>
+            <img src="/images/logo.png" alt="PoseLens" className="h-full w-auto object-contain" />
           </div>
-          <span className="text-sm font-bold tracking-tight text-white">PoseLens</span>
         </div>
 
         {/* Right: Settings */}
