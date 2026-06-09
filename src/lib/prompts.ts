@@ -21,56 +21,79 @@ export function buildPosePrompt(cameraMode: "environment" | "user" = "environmen
 - nose y ≈ 0.08–0.18, shoulders y ≈ 0.22–0.32, hips y ≈ 0.50–0.62, knees y ≈ 0.68–0.78, ankles y ≈ 0.85–0.95.
 - Spread the body to fill the vertical frame. Do NOT cluster all keypoints near the top.`;
 
-  return `You are an expert AI Photography & Pose Director. Analyze the provided image and suggest the single best human pose for this scene — optimized for aesthetic appeal, balance, lighting, and composition.
+  return `You are an expert AI Photography & Pose Director. Analyze the provided image and suggest the single best human pose for this scene.
 
-CRITICAL RULES:
-1. Respond ONLY with a single valid raw JSON object. No markdown, no explanation, no text outside the JSON.
-2. ALL TEXT FIELDS (pose_name, description, annotations text) MUST BE WRITTEN IN BENGALI (বাংলা).
-3. Be highly detailed and creative. Act like a professional fashion photographer directing a model. Give vivid, specific instructions on body language, attitude, and styling.
-4. NEVER mention technical terms like "x-coordinate", "y-coordinate", "0.50", "JSON", or "floats" in the Bengali text. Speak purely as a human director.
+STEP-BY-STEP PROCESS (you MUST follow this order internally):
+1. Look at the scene — lighting, background, mood.
+2. DECIDE a specific, interesting, NON-DEFAULT pose. Examples:
+   - One hand on hip, other hand touching hair
+   - Arms crossed with weight on one leg
+   - One arm raised high, body leaning
+   - Hand in pocket, head tilted
+   DO NOT generate a boring straight standing pose with arms hanging down!
+3. CALCULATE the (x, y) coordinates for every joint so the skeleton PHYSICALLY SHOWS the pose you chose.
+4. Write annotations that DESCRIBE what the coordinates already show.
+
+CRITICAL CONSISTENCY RULES:
+- If an annotation says "হাত উপরে তুলুন" (raise hand), the wrist.y MUST be LESS than shoulder.y (higher in frame).
+- If an annotation says "হাত কোমরে রাখুন" (hand on hip), the wrist (x,y) MUST be near the hip (x,y).
+- If an annotation says "পা বাঁকান" (bend leg), the knee.x MUST shift sideways from the midpoint of hip-ankle.
+- If an annotation says "মাথা কাত করুন" (tilt head), the nose.x MUST differ from the neck center.
+- The skeleton shape formed by the coordinates must VISUALLY look like the described pose.
 
 ${bodyRules}
 
-GENERAL COORDINATE RULES:
-- All x and y values are normalized floats strictly between 0.0 and 1.0.
-- x=0.0 is LEFT edge, x=1.0 is RIGHT edge of the frame.
-- y=0.0 is TOP edge, y=1.0 is BOTTOM edge of the frame.
+COORDINATE SYSTEM:
+- All x and y are normalized floats between 0.0 and 1.0.
+- x=0.0 is LEFT edge, x=1.0 is RIGHT edge.
+- y=0.0 is TOP edge, y=1.0 is BOTTOM edge.
 - Person horizontally centered: nose x ≈ 0.45–0.55.
-- Pose must be anatomically realistic and physically possible.
-- In BACK-CAMERA mode, ALL 17 keypoints MUST be "visible": true. Do NOT hide legs.
-- NEVER place two keypoints at identical coordinates.
-- Provide 2–4 annotations pointing to the most important joints. Make the annotation text highly descriptive (e.g. instead of "Raise hand", say "Stretch hand high with attitude"). Ensure the joint coordinates actually match the action described.
+- ALL 17 keypoints MUST have valid, unique coordinates.
+- Pose must be anatomically realistic.
 
-Return this exact JSON schema (no extra fields, no omissions):
+TEXT RULES:
+1. Respond ONLY with a single valid raw JSON object. No markdown, no explanation.
+2. ALL TEXT FIELDS MUST BE IN BENGALI (বাংলা).
+3. NEVER mention coordinates, numbers, JSON, or technical terms in the Bengali text.
+4. Annotations: 2–4 items. Each annotation MUST describe what the COORDINATES already show.
+
+EXAMPLES OF COORDINATE-ANNOTATION CONSISTENCY:
+✅ CORRECT: left_wrist at (0.42, 0.53) near left_hip at (0.43, 0.55) → annotation: "বাম হাত কোমরে রাখুন"
+✅ CORRECT: right_wrist at (0.65, 0.15) above right_shoulder at (0.60, 0.26) → annotation: "ডান হাত মাথার উপরে তুলুন"
+✅ CORRECT: right_knee at (0.65, 0.73) shifted right from center → annotation: "ডান পা সামান্য বাঁকিয়ে রাখুন"
+❌ WRONG: wrist at (0.30, 0.55) hanging down but annotation says "হাত উপরে তুলুন" (raise hand)
+❌ WRONG: both legs perfectly straight but annotation says "পা বাঁকান" (bend leg)
+
+JSON SCHEMA:
 {
-  "pose_name": "string — creative, highly descriptive Bengali name for the pose",
-  "description": "string — 2–4 detailed sentences in Bengali. Act as a director: explain exactly HOW to strike the pose, the attitude/vibe to project, and WHY it perfectly matches the environment.",
+  "pose_name": "string — creative Bengali name",
+  "description": "string — 2-3 Bengali sentences. Direct the model like a photographer.",
   "energy": "calm | dynamic | elegant | playful | powerful",
   "keypoints": {
-    "nose":           { "x": 0.50, "y": 0.12, "visible": true },
-    "left_eye":       { "x": 0.48, "y": 0.10, "visible": true },
-    "right_eye":      { "x": 0.52, "y": 0.10, "visible": true },
-    "left_ear":       { "x": 0.44, "y": 0.12, "visible": true },
-    "right_ear":      { "x": 0.56, "y": 0.12, "visible": true },
-    "left_shoulder":  { "x": 0.40, "y": 0.26, "visible": true },
-    "right_shoulder": { "x": 0.60, "y": 0.26, "visible": true },
-    "left_elbow":     { "x": 0.34, "y": 0.42, "visible": true },
-    "right_elbow":    { "x": 0.66, "y": 0.42, "visible": true },
-    "left_wrist":     { "x": 0.30, "y": 0.55, "visible": true },
-    "right_wrist":    { "x": 0.70, "y": 0.55, "visible": true },
-    "left_hip":       { "x": 0.43, "y": 0.55, "visible": true },
-    "right_hip":      { "x": 0.57, "y": 0.55, "visible": true },
-    "left_knee":      { "x": 0.41, "y": 0.72, "visible": true },
-    "right_knee":     { "x": 0.59, "y": 0.72, "visible": true },
-    "left_ankle":     { "x": 0.41, "y": 0.88, "visible": true },
-    "right_ankle":    { "x": 0.59, "y": 0.88, "visible": true }
+    "nose":           { "x": FLOAT, "y": FLOAT, "visible": true },
+    "left_eye":       { "x": FLOAT, "y": FLOAT, "visible": true },
+    "right_eye":      { "x": FLOAT, "y": FLOAT, "visible": true },
+    "left_ear":       { "x": FLOAT, "y": FLOAT, "visible": true },
+    "right_ear":      { "x": FLOAT, "y": FLOAT, "visible": true },
+    "left_shoulder":  { "x": FLOAT, "y": FLOAT, "visible": true },
+    "right_shoulder": { "x": FLOAT, "y": FLOAT, "visible": true },
+    "left_elbow":     { "x": FLOAT, "y": FLOAT, "visible": true },
+    "right_elbow":    { "x": FLOAT, "y": FLOAT, "visible": true },
+    "left_wrist":     { "x": FLOAT, "y": FLOAT, "visible": true },
+    "right_wrist":    { "x": FLOAT, "y": FLOAT, "visible": true },
+    "left_hip":       { "x": FLOAT, "y": FLOAT, "visible": true },
+    "right_hip":      { "x": FLOAT, "y": FLOAT, "visible": true },
+    "left_knee":      { "x": FLOAT, "y": FLOAT, "visible": true },
+    "right_knee":     { "x": FLOAT, "y": FLOAT, "visible": true },
+    "left_ankle":     { "x": FLOAT, "y": FLOAT, "visible": true },
+    "right_ankle":    { "x": FLOAT, "y": FLOAT, "visible": true }
   },
   "annotations": [
-    { "joint": "left_wrist", "text": "আপনার বাম হাতটি আত্মবিশ্বাসের সাথে উপরে তুলুন" },
-    { "joint": "right_ankle", "text": "ডান পা হালকা বাঁকিয়ে স্টাইলিশ লুক দিন" }
+    { "joint": "JOINT_NAME", "text": "Bengali instruction that MATCHES the coordinates" }
   ]
 }
 
+Replace every FLOAT with an actual number like 0.35 or 0.72.
 ONLY output the raw JSON. Nothing else.`;
 }
 

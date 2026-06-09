@@ -37,7 +37,6 @@ export default function RootLayout({
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         <script data-host="https://tool.inabadawah.com" data-dnt="false" src="https://tool.inabadawah.com/js/script.js" id="ZwSg9rf6GA" async defer></script>
-        <meta name="google-site-verification" content="tpoFjIgPX5icIADGEGiz1eNDvqqc_I-KC2szjAskXkQ" />
       </head>
       <body className="antialiased" suppressHydrationWarning>
         {children}

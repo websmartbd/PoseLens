@@ -4,7 +4,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { analyzePoseFromImage } from "@/lib/ai-service";
 import { drawSkeleton } from "@/lib/skeletonDraw";
 import type { Provider, PoseResponse } from "@/types";
-import { ENERGY_BADGE_COLORS, ENERGY_GLOW, USER_ERRORS } from "@/config/constants";
+import { USER_ERRORS } from "@/config/constants";
 import SettingsModal from "@/components/ui/SettingsModal";
 
 type AppState = "idle" | "camera" | "capturing" | "analyzing" | "result" | "error";
@@ -14,6 +14,8 @@ const friendlyError = (err: unknown) => {
   const key = Object.keys(USER_ERRORS).find((k) => msg.toLowerCase().includes(k.toLowerCase()));
   return key ? USER_ERRORS[key] : msg;
 };
+
+const DOT_COLORS = ["#a855f7", "#c084fc", "#e879f9", "#f0abfc"];
 
 export default function PoseCamera() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -31,8 +33,8 @@ export default function PoseCamera() {
   const [cameraReady, setCameraReady] = useState(false);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [isMirrored, setIsMirrored] = useState<boolean>(false);
+  const [showCard, setShowCard] = useState(true);
 
-  // Check for API key on mount and react to cross-tab changes
   useEffect(() => {
     const check = () => setHasApiKey(!!localStorage.getItem("aipose_api_key")?.trim());
     check();
@@ -40,41 +42,30 @@ export default function PoseCamera() {
     return () => window.removeEventListener("storage", check);
   }, [settingsOpen]);
 
-  // Animate skeleton fade-in
   const animateSkeleton = useCallback(
     (poseData: PoseResponse, ctx: CanvasRenderingContext2D, w: number, h: number) => {
       cancelAnimationFrame(animFrameRef.current);
       alphaRef.current = 0;
-
       const animate = () => {
         alphaRef.current = Math.min(alphaRef.current + 0.04, 1);
         drawSkeleton(ctx, poseData, w, h, alphaRef.current);
-        if (alphaRef.current < 1) {
-          animFrameRef.current = requestAnimationFrame(animate);
-        }
+        if (alphaRef.current < 1) animFrameRef.current = requestAnimationFrame(animate);
       };
       animFrameRef.current = requestAnimationFrame(animate);
     },
     []
   );
 
-  // Start camera with a given facingMode
   const startCamera = useCallback(async (mode: "environment" | "user" = "environment") => {
-    // Stop any existing stream
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
-      // Give Android hardware time to release the lens
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
-
     setCameraReady(false);
     setIsMirrored(mode === "user");
-
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: mode },
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode } });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -84,7 +75,6 @@ export default function PoseCamera() {
       setAppState("camera");
       setError("");
     } catch (err: any) {
-      // If the specific facing mode fails, try generic video as a fallback
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         streamRef.current = stream;
@@ -102,18 +92,16 @@ export default function PoseCamera() {
     }
   }, []);
 
-  // Toggle between front and back camera
   const cycleCamera = useCallback(() => {
-    const newMode = facingMode === "environment" ? "user" : "environment";
-    startCamera(newMode);
+    startCamera(facingMode === "environment" ? "user" : "environment");
   }, [facingMode, startCamera]);
 
-  // Stop camera
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setCameraReady(false);
     setPose(null);
+    setShowCard(true);
     setAppState("idle");
     if (overlayCanvasRef.current) {
       const ctx = overlayCanvasRef.current.getContext("2d");
@@ -121,57 +109,40 @@ export default function PoseCamera() {
     }
   }, []);
 
-  // Capture and analyze
   const captureAndAnalyze = useCallback(async () => {
     const video = videoRef.current;
     const captureCanvas = captureCanvasRef.current;
     const overlayCanvas = overlayCanvasRef.current;
-
     if (!video || !captureCanvas || !overlayCanvas || !cameraReady) return;
 
     const apiKey = localStorage.getItem("aipose_api_key")?.trim();
     const modelName = localStorage.getItem("aipose_model")?.trim() || "meta-llama/llama-4-scout-17b-16e-instruct";
     const provider = (localStorage.getItem("aipose_provider") ?? "groq") as Provider;
     const language = localStorage.getItem("aipose_language") ?? "Bangla";
-    if (!apiKey) {
-      setSettingsOpen(true);
-      return;
-    }
+    if (!apiKey) { setSettingsOpen(true); return; }
 
     setAppState("capturing");
-
-    // Brief flash effect
+    setShowCard(true);
     await new Promise((r) => setTimeout(r, 150));
 
-    // Draw current video frame to hidden capture canvas
     const { videoWidth, videoHeight } = video;
     captureCanvas.width = videoWidth;
     captureCanvas.height = videoHeight;
     const captureCtx = captureCanvas.getContext("2d")!;
-    
-    // If mirrored, flip the canvas before drawing the video so the AI gets the correct orientation
-    if (isMirrored) {
-      captureCtx.translate(videoWidth, 0);
-      captureCtx.scale(-1, 1);
-    }
+    if (isMirrored) { captureCtx.translate(videoWidth, 0); captureCtx.scale(-1, 1); }
     captureCtx.drawImage(video, 0, 0, videoWidth, videoHeight);
-    // Reset transform just in case
     captureCtx.setTransform(1, 0, 0, 1, 0, 0);
 
     const base64 = captureCanvas.toDataURL("image/jpeg", 0.85).split(",")[1];
-
     setAppState("analyzing");
 
     try {
       const result = await analyzePoseFromImage(base64, apiKey, modelName, provider, language, facingMode);
       setPose(result);
       setAppState("result");
-
-      // Size overlay canvas to match the video element's displayed dimensions
       const rect = video.getBoundingClientRect();
       overlayCanvas.width = rect.width;
       overlayCanvas.height = rect.height;
-
       const ctx = overlayCanvas.getContext("2d")!;
       animateSkeleton(result, ctx, rect.width, rect.height);
     } catch (err) {
@@ -180,7 +151,6 @@ export default function PoseCamera() {
     }
   }, [cameraReady, animateSkeleton, isMirrored, facingMode]);
 
-  // Sync overlay canvas size on resize (coalesced via rAF)
   useEffect(() => {
     if (!videoRef.current || !overlayCanvasRef.current) return;
     let rafId: number;
@@ -200,199 +170,200 @@ export default function PoseCamera() {
     return () => { observer.disconnect(); cancelAnimationFrame(rafId); };
   }, [pose]);
 
-  const glowColor = pose ? ENERGY_GLOW[pose.energy] ?? "#c77dff" : "#c77dff";
-
   return (
-    <div className="fixed inset-0 overflow-hidden bg-black text-white selection:bg-violet-500/30">
-      {/* === BACKGROUND CAMERA === */}
-      <div className="absolute inset-0 z-0 bg-gray-950">
+    <div className="fixed inset-0 overflow-hidden bg-black text-white">
+
+      {/* ═══════════════ CAMERA BACKGROUND ═══════════════ */}
+      <div className="absolute inset-0 z-0">
         {appState === "idle" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gray-950">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/5">
-              <svg className="h-8 w-8 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4"
+            style={{ background: "radial-gradient(ellipse at 50% 60%, #1a0a2e 0%, #060010 100%)" }}>
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl"
+              style={{ border: "1px solid rgba(167,139,250,0.2)", background: "rgba(124,58,237,0.08)", boxShadow: "0 0 40px rgba(124,58,237,0.15)" }}>
+              <svg className="h-10 w-10 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+                  d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </div>
-            <p className="text-sm text-gray-400">Camera is off</p>
+            <p className="text-sm font-medium tracking-wide text-purple-300/60">Tap to open camera</p>
           </div>
         )}
 
-        {/* Video element */}
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
+        <video ref={videoRef} autoPlay playsInline muted
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${isMirrored ? "scale-x-[-1]" : ""}`}
-          style={{ opacity: appState === "idle" ? 0 : 1 }}
-        />
+          style={{ opacity: appState === "idle" ? 0 : 1 }} />
 
-        {/* Canvas overlay for skeleton */}
-        <canvas
-          ref={overlayCanvasRef}
-          className={`pointer-events-none absolute inset-0 h-full w-full ${isMirrored ? "scale-x-[-1]" : ""}`}
-        />
+        <canvas ref={overlayCanvasRef}
+          className={`pointer-events-none absolute inset-0 h-full w-full ${isMirrored ? "scale-x-[-1]" : ""}`} />
 
-        {/* Flash effect on capture */}
         {appState === "capturing" && (
-          <div className="absolute inset-0 z-10 animate-[ping_0.3s_ease-out] bg-white" />
+          <div className="absolute inset-0 z-10 bg-white/70 animate-[ping_0.25s_ease-out]" />
         )}
 
-        {/* Analyzing overlay */}
         {appState === "analyzing" && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/60 backdrop-blur-md">
-            <div className="relative">
-              <div className="h-16 w-16 animate-spin rounded-full border-4 border-violet-500/30 border-t-violet-400" />
-              <div
-                className="absolute inset-2 animate-pulse rounded-full"
-                style={{ background: "radial-gradient(circle, #c77dff40, transparent)" }}
-              />
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-5"
+            style={{ background: "rgba(5,0,15,0.7)", backdropFilter: "blur(10px)" }}>
+            <div className="relative h-20 w-20">
+              <div className="absolute inset-0 animate-ping rounded-full border border-purple-500/30" />
+              <div className="absolute inset-0 animate-spin rounded-full border-[3px] border-purple-500/20 border-t-purple-400" />
+              <div className="absolute inset-3 animate-pulse rounded-full"
+                style={{ background: "radial-gradient(circle, rgba(199,119,255,0.4), transparent)" }} />
             </div>
-            <p className="text-sm font-medium text-white tracking-wide">Designing Pose...</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-purple-300">Designing Pose...</p>
           </div>
         )}
-
-        {/* Shadow overlays for top and bottom readability */}
-        <div className="pointer-events-none absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-black/80 to-transparent" />
-        <div className="pointer-events-none absolute bottom-0 left-0 w-full h-48 bg-gradient-to-t from-black/90 to-transparent" />
       </div>
 
-      {/* === HEADER (Floating) === */}
-      <header className="absolute left-0 top-0 z-20 flex w-full items-center justify-between p-4 pt-safe-top">
-        <div className="flex items-center gap-1">
-          {/* Subtle Logo */}
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 backdrop-blur-md border border-white/10 shadow-lg overflow-hidden">
+      {/* ═══════════════ TOP LOGO BAR (always visible) ═══════════════ */}
+      <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 py-3"
+        style={{ background: "rgba(0,0,0,0.85)" }}>
+        {/* Left: Logo */}
+        <div className="flex items-center gap-1.5">
+          <div className="h-7 w-7 overflow-hidden rounded-full border border-white/10"
+            style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}>
             <img src="/images/logo.png" alt="PoseLens" className="h-full w-full object-cover" />
           </div>
-          <span className="text-sm font-bold tracking-tight text-white/90 drop-shadow-md">
-            PoseLens
-          </span>
+          <span className="text-sm font-bold tracking-tight text-white">PoseLens</span>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Live indicator */}
-          {(appState === "camera" || appState === "result") && (
-            <div className="flex items-center gap-1.5 rounded-full bg-black/50 backdrop-blur-md px-2.5 py-1 border border-red-500/30">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-red-300">Live</span>
-            </div>
-          )}
-
-          {/* Settings button */}
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-white transition hover:bg-black/70"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        </div>
+        {/* Right: Settings */}
+        <button id="settings-btn" onClick={() => setSettingsOpen(true)}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-white/70 transition hover:text-white active:scale-90"
+          style={{ background: "rgba(255,255,255,0.1)", backdropFilter: "blur(8px)" }}>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
       </header>
 
-      {/* Error Toast */}
+      {/* ═══════════════ ERROR TOAST ═══════════════ */}
       {appState === "error" && error && (
-        <div className="absolute top-20 left-4 right-4 z-50 flex items-start gap-2 rounded-2xl bg-red-500/90 backdrop-blur-md p-3 shadow-2xl">
-          <span className="text-white text-sm">⚠</span>
+        <div className="absolute top-20 inset-x-4 z-50 flex items-start gap-3 rounded-2xl p-3 shadow-2xl"
+          style={{ background: "rgba(200,30,30,0.88)", backdropFilter: "blur(12px)" }}>
+          <span>⚠</span>
           <p className="text-xs text-white/90">{error}</p>
         </div>
       )}
 
-      {/* === RESULT BOTTOM SHEET === */}
-      {pose && appState === "result" && (
-        <div className="absolute bottom-[100px] left-4 right-4 z-20 animate-fade-in">
-          <div
-            className="rounded-3xl border bg-black/60 backdrop-blur-xl p-4 shadow-2xl transition-all duration-500"
+      {/* ═══════════════ INSTRUCTION CARD (result only, dismissible) ═══════════════ */}
+      {pose && appState === "result" && showCard && (
+        <div className="absolute left-4 z-20 animate-fade-in" style={{ bottom: "120px" }}>
+          <div className="rounded-2xl px-4 py-3.5 max-w-[240px] relative"
             style={{
-              borderColor: glowColor + "40",
-              boxShadow: `0 20px 40px ${glowColor}15, inset 0 1px 0 ${glowColor}30`,
-            }}
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white leading-tight">{pose.pose_name}</h3>
-              <span
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                  ENERGY_BADGE_COLORS[pose.energy] ?? "bg-gray-500/20 text-gray-300 border-gray-500/30"
-                }`}
-              >
-                {pose.energy}
-              </span>
+              background: "rgba(10, 5, 20, 0.88)",
+              backdropFilter: "blur(20px)",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}>
+            {/* Header row: title + close */}
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[15px] font-bold text-white tracking-tight">Instraction</h3>
+              <button onClick={() => setShowCard(false)}
+                className="flex h-6 w-6 items-center justify-center rounded-full text-white/50 hover:text-white transition"
+                style={{ background: "rgba(255,255,255,0.1)" }}>
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            <p className="text-sm text-gray-300 leading-snug">{pose.description}</p>
+            {/* Bullet list */}
+            {pose.annotations && pose.annotations.length > 0 ? (
+              <ul className="space-y-2.5">
+                {pose.annotations.map((ann, i) => (
+                  <li key={i} className="flex items-start gap-2.5">
+                    <span className="mt-[5px] flex h-3 w-3 shrink-0 items-center justify-center rounded-full"
+                      style={{ background: DOT_COLORS[i % DOT_COLORS.length], boxShadow: `0 0 6px ${DOT_COLORS[i % DOT_COLORS.length]}80` }} />
+                    <span className="text-[13px] font-semibold leading-snug text-white/90">{ann.text}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[13px] leading-snug text-white/80">{pose.description}</p>
+            )}
           </div>
         </div>
       )}
 
-      {/* === FLOATING BOTTOM CONTROLS === */}
-      <div className="absolute bottom-0 left-0 z-30 flex w-full flex-col items-center pb-safe-bottom">
-        <div className="flex w-full max-w-sm items-center justify-center gap-6 p-6">
-          {appState === "idle" ? (
-            <button
-              onClick={() => startCamera()}
-              className="flex w-full max-w-[200px] items-center justify-center gap-2 rounded-full bg-white text-black px-6 py-3.5 text-sm font-bold shadow-xl transition active:scale-95"
-            >
+      {/* ═══════════════ BOTTOM BAR ═══════════════ */}
+      <div className="absolute inset-x-0 bottom-0 z-30">
+
+        {appState === "idle" ? (
+          <div className="flex items-center justify-center pb-16 pt-4">
+            <button id="open-camera-btn" onClick={() => startCamera()}
+              className="flex items-center gap-2.5 rounded-full px-8 py-4 text-sm font-bold text-white shadow-2xl transition active:scale-95"
+              style={{
+                background: "linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)",
+                boxShadow: "0 0 30px rgba(124,58,237,0.5), 0 4px 20px rgba(0,0,0,0.4)",
+              }}>
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
                   d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
-                  d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               Open Camera
             </button>
-          ) : (
-            <>
-              {/* Stop / Cancel button */}
-              <button
-                onClick={stopCamera}
-                className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-white transition active:scale-90"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </div>
+        ) : (
+          /* Dark solid bottom bar */
+          <div className="flex items-center justify-between px-8 py-5"
+            style={{ background: "rgba(0,0,0,0.95)" }}>
+
+            {/* Left: Close / Stop camera */}
+            <button id="stop-camera-btn" onClick={stopCamera}
+              className="flex h-14 w-14 items-center justify-center rounded-full text-white transition active:scale-90"
+              style={{ background: "#1c1c1e" }}>
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Center: Shutter / Click */}
+            <div className="relative flex h-[80px] w-[80px] items-center justify-center rounded-full"
+              style={{
+                border: "3px solid rgba(168,85,247,0.6)",
+                boxShadow: "0 0 20px rgba(168,85,247,0.4), inset 0 0 12px rgba(168,85,247,0.15)",
+                background: "#1c1c1e",
+              }}>
+              <button id="shutter-btn" onClick={captureAndAnalyze}
+                disabled={!cameraReady || appState === "analyzing" || appState === "capturing"}
+                className="h-[60px] w-[60px] rounded-full transition active:scale-90 disabled:opacity-40"
+                style={{
+                  background: "radial-gradient(circle at 40% 35%, #ffffff 0%, #e8e8e8 100%)",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                }}
+              />
+            </div>
+
+            {/* Right: Flip / Refresh */}
+            {appState === "result" ? (
+              <button id="retake-btn" onClick={captureAndAnalyze}
+                className="flex h-14 w-14 items-center justify-center rounded-full text-white transition active:scale-90"
+                style={{ background: "#1c1c1e" }}>
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </button>
-
-              {/* Shutter Button (Capture) */}
-              <div className="relative flex h-[72px] w-[72px] items-center justify-center rounded-full border-4 border-white/40">
-                <button
-                  onClick={captureAndAnalyze}
-                  disabled={!cameraReady || appState === "analyzing" || appState === "capturing"}
-                  className="h-14 w-14 rounded-full bg-white transition active:scale-90 disabled:opacity-50"
-                />
-              </div>
-
-              {/* Retake / Refresh OR Camera Flip */}
-              {appState === "result" ? (
-                <button
-                  onClick={captureAndAnalyze}
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-white transition active:scale-90"
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </button>
-              ) : (
-                <button
-                  onClick={cycleCamera}
-                  disabled={!cameraReady || appState === "analyzing" || appState === "capturing"}
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-white transition active:scale-90 disabled:opacity-50"
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </button>
-              )}
-            </>
-          )}
-        </div>
+            ) : (
+              <button id="flip-btn" onClick={cycleCamera}
+                disabled={!cameraReady || appState === "analyzing" || appState === "capturing"}
+                className="flex h-14 w-14 items-center justify-center rounded-full text-white transition active:scale-90 disabled:opacity-40"
+                style={{ background: "#1c1c1e" }}>
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Hidden capture canvas */}
+      {/* Hidden canvas */}
       <canvas ref={captureCanvasRef} className="hidden" />
 
-      {/* Settings modal */}
       <SettingsModal
         isOpen={settingsOpen}
         onClose={() => {

@@ -12,138 +12,143 @@ export function drawSkeleton(
   ctx.globalAlpha = alpha;
 
   const kp = pose.keypoints;
-  const px = (k: Keypoint | undefined) => k && k.visible ? { x: k.x * width, y: k.y * height } : null;
+  const px = (k: Keypoint | undefined) =>
+    k && k.visible ? { x: k.x * width, y: k.y * height } : null;
 
-  // Sizing parameters
-  const boneWidth = Math.max(3, Math.min(width, height) * 0.008);
-  const jointRadius = boneWidth * 1.5;
+  // Sizing
+  const boneWidth = Math.max(2.5, Math.min(width, height) * 0.007);
+  const jointRadius = boneWidth * 1.6;
   const headRadiusY = boneWidth * 5;
-  const headRadiusX = headRadiusY * 0.7; // Oval head
+  const headRadiusX = headRadiusY * 0.72;
 
-  const nose = px(kp["nose"]);
+  const nose      = px(kp["nose"]);
   const lShoulder = px(kp["left_shoulder"]);
   const rShoulder = px(kp["right_shoulder"]);
-  const lElbow = px(kp["left_elbow"]);
-  const rElbow = px(kp["right_elbow"]);
-  const lWrist = px(kp["left_wrist"]);
-  const rWrist = px(kp["right_wrist"]);
-  const lHip = px(kp["left_hip"]);
-  const rHip = px(kp["right_hip"]);
-  const lKnee = px(kp["left_knee"]);
-  const rKnee = px(kp["right_knee"]);
-  const lAnkle = px(kp["left_ankle"]);
-  const rAnkle = px(kp["right_ankle"]);
+  const lElbow    = px(kp["left_elbow"]);
+  const rElbow    = px(kp["right_elbow"]);
+  const lWrist    = px(kp["left_wrist"]);
+  const rWrist    = px(kp["right_wrist"]);
+  const lHip      = px(kp["left_hip"]);
+  const rHip      = px(kp["right_hip"]);
+  const lKnee     = px(kp["left_knee"]);
+  const rKnee     = px(kp["right_knee"]);
+  const lAnkle    = px(kp["left_ankle"]);
+  const rAnkle    = px(kp["right_ankle"]);
 
-  // Calculate spine points
-  let neck = null;
+  let neck: { x: number; y: number } | null = null;
   if (lShoulder && rShoulder) {
     neck = { x: (lShoulder.x + rShoulder.x) / 2, y: (lShoulder.y + rShoulder.y) / 2 };
   }
-  let pelvis = null;
+  let pelvis: { x: number; y: number } | null = null;
   if (lHip && rHip) {
     pelvis = { x: (lHip.x + rHip.x) / 2, y: (lHip.y + rHip.y) / 2 };
   }
 
-  // Helper to draw a bone line
-  const drawBone = (p1: any, p2: any) => {
-    if (!p1 || !p2) return;
+  const NEON_CORE   = "#d946ef";   // Fuchsia/Purple core
+  const NEON_GLOW   = "#a855f7";   // Purple outer glow
+  const JOINT_CORE  = "#ffffff";   // White center
+  const JOINT_GLOW  = "#d946ef";   // Purple joint glow
+
+  // ── PASS 1: Glowing Bones ────────────────────────────────────────────────
+  const allBones: [any, any][] = [
+    [lShoulder, rShoulder],
+    [neck, pelvis],
+    [lHip, rHip],
+    [lShoulder, lElbow],
+    [lElbow, lWrist],
+    [rShoulder, rElbow],
+    [rElbow, rWrist],
+    [lHip, lKnee],
+    [lKnee, lAnkle],
+    [rHip, rKnee],
+    [rKnee, rAnkle],
+  ];
+  if (nose && neck) {
+    allBones.push([neck, { x: nose.x, y: nose.y + headRadiusY * 0.5 }]);
+  }
+
+  // Outer glow pass
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = boneWidth * 3.5;
+  ctx.strokeStyle = NEON_GLOW;
+  ctx.shadowColor = NEON_GLOW;
+  ctx.shadowBlur = 15;
+  ctx.globalAlpha = alpha * 0.5;
+  for (const [p1, p2] of allBones) {
+    if (!p1 || !p2) continue;
     ctx.beginPath();
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
     ctx.stroke();
-  };
+  }
+  ctx.restore();
 
-  // ── PASS 1: Draw Black Bones ──────────────────────────────────────────
+  // Core line
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.lineWidth = boneWidth;
-  ctx.strokeStyle = "#111111"; // Almost black bones
-  
-  // Optional: subtle white drop-shadow so the black lines are visible in dark rooms
-  ctx.shadowColor = "rgba(255, 255, 255, 0.8)";
-  ctx.shadowBlur = 6;
-
-  // Spine & Torso box
-  drawBone(lShoulder, rShoulder);
-  drawBone(neck, pelvis);
-  drawBone(lHip, rHip);
-  
-  // Arms
-  drawBone(lShoulder, lElbow);
-  drawBone(lElbow, lWrist);
-  drawBone(rShoulder, rElbow);
-  drawBone(rElbow, rWrist);
-  
-  // Legs
-  drawBone(lHip, lKnee);
-  drawBone(lKnee, lAnkle);
-  drawBone(rHip, rKnee);
-  drawBone(rKnee, rAnkle);
-  
-  // Neck to Head
-  if (nose && neck) {
-    drawBone(neck, { x: nose.x, y: nose.y + headRadiusY * 0.5 });
+  ctx.lineWidth = boneWidth * 1.2;
+  ctx.strokeStyle = NEON_CORE;
+  ctx.shadowColor = NEON_CORE;
+  ctx.shadowBlur = 5;
+  ctx.globalAlpha = alpha;
+  for (const [p1, p2] of allBones) {
+    if (!p1 || !p2) continue;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
   }
   ctx.restore();
 
-  // ── PASS 2: Draw White Joints with Black Borders ──────────────────────
-  ctx.save();
-  ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = "#111111";
-  ctx.lineWidth = Math.max(2, boneWidth * 0.4);
+  // ── PASS 2: Glowing Joints ────────────────────────────────────────────────
+  const allJoints = [lShoulder, rShoulder, lElbow, rElbow, lWrist, rWrist, lHip, rHip, lKnee, rKnee, lAnkle, rAnkle, neck, pelvis];
 
-  const drawJoint = (p: any) => {
+  const drawGlowJoint = (p: any) => {
     if (!p) return;
+    // Outer glow halo
     ctx.beginPath();
-    ctx.arc(p.x, p.y, jointRadius, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, jointRadius * 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = JOINT_GLOW;
+    ctx.shadowColor = JOINT_GLOW;
+    ctx.shadowBlur = 10;
+    ctx.globalAlpha = alpha * 0.6;
     ctx.fill();
-    ctx.stroke();
+
+    // Bright white center
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, jointRadius * 0.8, 0, Math.PI * 2);
+    ctx.fillStyle = JOINT_CORE;
+    ctx.shadowColor = "#ffffff";
+    ctx.shadowBlur = 4;
+    ctx.globalAlpha = alpha;
+    ctx.fill();
   };
 
-  // Draw all joints
-  const joints = [lShoulder, rShoulder, lElbow, rElbow, lWrist, rWrist, lHip, rHip, lKnee, rKnee, lAnkle, rAnkle, neck, pelvis];
-  joints.forEach(drawJoint);
+  ctx.save();
+  allJoints.forEach(drawGlowJoint);
 
-  // Draw Head (Oval)
+  // Head oval with glow
   if (nose) {
     ctx.beginPath();
-    ctx.ellipse(nose.x, nose.y, headRadiusX, headRadiusY, 0, 0, Math.PI * 2);
+    ctx.ellipse(nose.x, nose.y, headRadiusX * 1.2, headRadiusY * 1.2, 0, 0, Math.PI * 2);
+    ctx.fillStyle = JOINT_GLOW;
+    ctx.shadowColor = JOINT_GLOW;
+    ctx.shadowBlur = 15;
+    ctx.globalAlpha = alpha * 0.6;
     ctx.fill();
-    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.ellipse(nose.x, nose.y, headRadiusX * 0.5, headRadiusY * 0.5, 0, 0, Math.PI * 2);
+    ctx.fillStyle = JOINT_CORE;
+    ctx.shadowColor = "#ffffff";
+    ctx.shadowBlur = 5;
+    ctx.globalAlpha = alpha;
+    ctx.fill();
   }
   ctx.restore();
-
-  // ── PASS 3: Floating text annotations ─────────────────────────────────
-  if (pose.annotations && pose.annotations.length > 0) {
-    ctx.save();
-    const fontSize = Math.max(14, Math.min(width, height) * 0.042);
-    ctx.font = `italic 700 ${fontSize}px system-ui, -apple-system, sans-serif`;
-    ctx.fillStyle = "white";
-    ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 1;
-
-    pose.annotations.forEach(ann => {
-      const joint = kp[ann.joint];
-      if (!joint?.visible) return;
-      const jPx = px(joint);
-      if (!jPx) return;
-      const isRight = joint.x > 0.5;
-      const textX = jPx.x + (isRight ? -(jointRadius * 2 + 10) : (jointRadius * 2 + 10));
-      
-      // Prevent text from overlapping the bottom UI card (bottom 30% of screen)
-      const maxTextY = height * 0.65;
-      let textY = jPx.y + (joint.y > 0.65 ? -20 : 24);
-      if (textY > maxTextY) textY = maxTextY;
-
-      ctx.textAlign = isRight ? "right" : "left";
-      ctx.fillText(ann.text, textX, textY);
-    });
-
-    ctx.restore();
-  }
 
   ctx.globalAlpha = 1;
 }
