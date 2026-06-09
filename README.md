@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="public/images/logo.png" alt="Pose Lens Logo" width="100" style="border-radius: 16px;" />
+<img src="public/images/logo.png" alt="Pose Lens Logo" width="500" style="border-radius: 16px;" />
 
 # Pose Lens
 
